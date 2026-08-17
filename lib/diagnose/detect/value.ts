@@ -11,7 +11,15 @@ export function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export function isBlank(value: string | null | undefined): value is null {
+/**
+ * The predicate narrows `null | undefined` rather than just `null`, which is
+ * what lets a caller treat the false branch as `string` under
+ * `noUncheckedIndexedAccess` — record field access yields `string | null |
+ * undefined`, and a missing key and a null cell are the same absence here.
+ */
+export function isBlank(
+  value: string | null | undefined,
+): value is null | undefined {
   return value === null || value === undefined || value.trim() === "";
 }
 
