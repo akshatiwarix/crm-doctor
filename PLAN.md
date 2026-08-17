@@ -367,22 +367,29 @@ spec of every planted pathology, which is what keeps the test suite honest inste
 
 **Patients:**
 
-- `northwind` — ~2,400 accounts, ~5,200 contacts. The messy demo.
-- `pinecrest` — ~320 accounts, ~600 contacts. Small and mostly clean; its entire job is to show the
+- `northwind` — 2,400 accounts, 3,619 contacts. The messy demo.
+- `pinecrest` — 320 accounts, 350 contacts. Small and mostly clean; its entire job is to show the
   tool declining to claim things.
+
+(Contact counts came out below the ~5,200/~600 estimated at plan time — the generator draws 0–3
+contacts per account and the draw settled under the midpoint. Every cohort still clears the support
+floor, so nothing downstream changed.)
 
 **Planted pathologies**, each with a test named after it:
 
 1. **the form that stopped asking** — `industry` absent on `source=webinar` after a date →
    `LOCALIZED` + `ONSET`.
-2. **the import that stamped** — batch `2024-11-vendor` wrote `industry=Technology` on 400 accounts
-   → `COUNTERFEIT`/batch-stamp, `HEALED`.
+2. **the import that stamped** — batch `2024-11-vendor` wrote `industry=Technology` on 129 accounts
+   → `COUNTERFEIT`/batch-stamp, `CHRONIC`. Planned as `HEALED`; that was wrong. Onset runs on the
+   locus cohort's own records, and a batch confined to one month contains no change-point to find —
+   claiming a date there would be an invention. `HEALED` is demonstrated by pathology 4 instead.
 3. **the confounded pair** — owner Priya ≈ source webinar → `CONFOUNDED`.
 4. **the leak that closed** — `phone = 000-000-0000` from a form default, fixed in January →
    `HEALED`.
 5. **the field nobody filled** — `employees` absent ~44%, flat across every cohort → `PERVASIVE`.
-6. **the integration that overwrote** — 900 records sharing one `lastModifiedAt`, `country` reverted
-   to a default → `CONTRADICTION` cluster.
+6. **the integration that overwrote** — 312 legacy-type records with `country` reverted to a default
+   and `lastActivityAt` mapped from the old system's creation date → three `CONTRADICTION` clusters,
+   all localised to the record type.
 7. **the alarming six** — 6 records, 5 defective, 83% → `UNDERPOWERED`, deliberately not a finding.
 8. **the plausible fake** — `Nick's Sandbox Co`, `ACME (DO NOT USE)` — passes all six deterministic
    families; only the model flags it.
