@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+/*
+ * Two distinctions this product exists to defend, so they are the design
+ * system's two axes.
+ *
+ * 1. CLAIMED vs CANNOT-CLAIM. A finding that cleared the Wilson bound is set
+ *    in the serif face on a solid rule. A finding that did not — too few
+ *    records, interval overlapping base rate — is set in mono on a dashed rule
+ *    and never gets the serif. The typeface itself is the epistemic status, so
+ *    the two can never be confused at a glance and can never be summed by an
+ *    eye scanning a column.
+ *
+ * 2. POPULATED vs KNOWN. Every vitals bar draws twice: a pale full-width track
+ *    for what is populated, a solid inset bar for what is known. The gap is
+ *    left empty rather than coloured, because it is an absence pretending to
+ *    be data, and an absence should read as one.
+ *
+ * Counterfeit values are hatched everywhere they appear. Hatching says
+ * "structured like data, is not data" without spending a hue on it, and it
+ * survives a greyscale screenshot.
+ *
+ * Onset carries the only warm colour in the system, and only when a defect is
+ * still happening. HEALED is deliberately drawn cold and quiet: a defect that
+ * stopped in January must not shout as loudly as one that is running now, and
+ * every hygiene tool on the market gets this wrong by giving them the same red.
+ */
+
+:root {
+  --paper: #f2f3f1;
+  --card: #fbfcfa;
+  --ink: #14181a;
+  --slate: #59635f;
+  --faint: #8b938f;
+  --rule: #dbdfda;
+  --rule-strong: #b4bab5;
+
+  /* epistemic class — the first axis */
+  --claimed: #1d3f57;
+  --claimed-soft: #e5edf2;
+  --unclaimed: #7d857f;
+  --unclaimed-soft: #eaece8;
+
+  /* finding types */
+  --localized: #1d3f57;
+  --localized-soft: #e5edf2;
+  --pervasive: #4a4478;
+  --pervasive-soft: #ebe9f4;
+  --confounded: #7a5310;
+  --confounded-soft: #f7efdc;
+
+  /* onset — warmth only where something is still happening */
+  --active: #a32d24;
+  --active-soft: #f8e8e5;
+  --healed: #3f6b57;
+  --healed-soft: #e6f0ea;
+  --chronic: #6b6f6c;
+  --chronic-soft: #ecedeb;
+
+  /* defect kinds */
+  --absent: #7d857f;
+  --counterfeit: #7a5310;
+  --contradiction: #8a3a5a;
+  --orphan: #4a4478;
+
+  /* the model's column, which never touches a deterministic count */
+  --triage: #2f6a6f;
+  --triage-soft: #e3f0f0;
+
+  --accent: #1d3f57;
+  --accent-soft: #e5edf2;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-slate: var(--slate);
+  --color-faint: var(--faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-claimed: var(--claimed);
+  --color-claimed-soft: var(--claimed-soft);
+  --color-unclaimed: var(--unclaimed);
+  --color-unclaimed-soft: var(--unclaimed-soft);
+  --color-localized: var(--localized);
+  --color-localized-soft: var(--localized-soft);
+  --color-pervasive: var(--pervasive);
+  --color-pervasive-soft: var(--pervasive-soft);
+  --color-confounded: var(--confounded);
+  --color-confounded-soft: var(--confounded-soft);
+  --color-active: var(--active);
+  --color-active-soft: var(--active-soft);
+  --color-healed: var(--healed);
+  --color-healed-soft: var(--healed-soft);
+  --color-chronic: var(--chronic);
+  --color-chronic-soft: var(--chronic-soft);
+  --color-absent: var(--absent);
+  --color-counterfeit: var(--counterfeit);
+  --color-contradiction: var(--contradiction);
+  --color-orphan: var(--orphan);
+  --color-triage: var(--triage);
+  --color-triage-soft: var(--triage-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-jetbrains-mono);
+  --font-serif: var(--font-newsreader);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A claim is a sentence somebody is prepared to defend, so it is set like one.
+   Nothing that failed the significance test is ever allowed this class. */
+.claim {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+}
+
+/* Instrument markings — the mono face at small size, for labels that are
+   read but not spoken. */
+.marking {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+/* Present, structured like data, not data. Used on counterfeit values wherever
+   they appear — in the vitals gap, in a record cell, in a cohort row. */
+.hatch-counterfeit {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--confounded-soft),
+    var(--confounded-soft) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+}
+
+/* Absence, drawn as absence. The vitals gap between populated and known. */
+.hatch-absent {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--unclaimed-soft),
+    var(--unclaimed-soft) 2px,
+    transparent 2px,
+    transparent 5px
+  );
+}
+
+/* Everything below the rule in the findings pane. Dashed borders say "this is
+   not a claim" before a single word has been read. */
+.underpowered {
+  border-style: dashed;
+  color: var(--unclaimed);
+}
+
+/* Tabular numbers everywhere a rate, an interval or a count appears. Rates
+   that do not align in a column cannot be compared, and comparison is the
+   entire point of the cohorts view. */
+.figure {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
