@@ -111,6 +111,7 @@ const deriver = z.discriminatedUnion("via", [
   z.object({ via: z.literal("lookup"), table: z.string().min(1) }),
   z.object({ via: z.literal("prefix"), table: z.string().min(1) }),
   z.object({ via: z.literal("suffix"), table: z.string().min(1) }),
+  z.object({ via: z.literal("host") }),
   z.object({ via: z.literal("band"), table: z.string().min(1) }),
 ]);
 
@@ -209,7 +210,9 @@ export const registriesSchema = z
     for (const check of registries.checks) {
       if (check.kind === "mismatch") {
         for (const side of [check.left, check.right]) {
-          if (side.derive.via !== "identity") {
+          // `identity` and `host` are self-contained: they derive a key out of
+          // the value itself and name no table.
+          if (side.derive.via !== "identity" && side.derive.via !== "host") {
             requireTable(side.derive.via, side.derive.table, `check "${check.id}"`);
           }
         }

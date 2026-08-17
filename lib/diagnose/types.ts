@@ -127,6 +127,10 @@ export type Deriver =
   | { readonly via: "prefix"; readonly table: string }
   /** Longest-suffix match. TLDs off a domain or an email. */
   | { readonly via: "suffix"; readonly table: string }
+  /** The host out of an email address or a URL, `www.` stripped. Comparing a
+   *  contact's email domain against its account's website is the whole reason
+   *  this exists. */
+  | { readonly via: "host" }
   /** Numeric bucket. Headcount and revenue bands. */
   | { readonly via: "band"; readonly table: string };
 

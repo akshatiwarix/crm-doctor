@@ -219,6 +219,46 @@ describe("counterfeit", () => {
     expect(run(varied).filter((d) => d.detector === "batchStamp")).toHaveLength(0);
   });
 
+  it("prefers the declared default over the sentinel that shadows it", () => {
+    // `Unknown` is both a global sentinel and a real picklist default. The
+    // useful diagnosis is "your picklist ships with this default and most
+    // records never moved off it" — that has a fix. "Somebody typed a
+    // placeholder" does not.
+    const patient = patientWith(
+      Array.from({ length: 30 }, (_, i) => account(`a${i}`, { industry: "Unknown" })),
+    );
+    const withDefault: Patient = {
+      ...patient,
+      fields: patient.fields.map((f) =>
+        f.id === "industry" ? { ...f, declaredDefault: "Unknown" } : f,
+      ),
+    };
+    const registriesWithUnknown: Registries = {
+      ...registries,
+      sentinels: [...registries.sentinels, "unknown"],
+    };
+    const defects = detectCounterfeit(
+      withDefault,
+      registriesWithUnknown,
+      config,
+      fieldsByObject(withDefault),
+    );
+    expect(new Set(defects.map((d) => d.detector))).toEqual(new Set(["schemaDefault"]));
+  });
+
+  it("does not flag real headcounts that happen to repeat a digit", () => {
+    // 22 employees is arithmetic, not nonsense. Applying the repeated-
+    // character test to a numeric field puts a false positive on roughly one
+    // account in forty, and a detector that fires on correct data teaches the
+    // reader to ignore the column.
+    const defects = run([
+      account("a1", { employees: "22" }),
+      account("a2", { employees: "23456" }),
+      account("a3", { phone: "+1 4567 123456" }),
+    ]);
+    expect(defects).toHaveLength(0);
+  });
+
   it("reports each counterfeit value under exactly one family", () => {
     // A value that is both a sentinel and structurally nonsense must not
     // produce two defects, or the same records get counted twice in a rate.

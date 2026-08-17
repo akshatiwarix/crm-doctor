@@ -81,6 +81,15 @@ export function derive(
       const host = v.replace(/^https?:\/\//, "").split(/[/?#]/)[0] ?? v;
       return longestMatch(host, table, (a, b) => a.endsWith(b));
     }
+    case "host": {
+      const at = v.lastIndexOf("@");
+      const raw = at === -1 ? v : v.slice(at + 1);
+      const host = raw
+        .replace(/^https?:\/\//, "")
+        .split(/[/?#]/)[0]
+        ?.replace(/^www\./, "");
+      return host === undefined || host === "" ? null : host;
+    }
     case "band": {
       const table = bands.get(deriver.table);
       if (table === undefined) return null;

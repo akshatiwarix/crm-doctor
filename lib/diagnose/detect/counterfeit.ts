@@ -6,10 +6,21 @@
  * dashboard ever built, and everything downstream believes it — routing fires
  * on it, scoring weights it, segmentation returns it.
  *
- * Six families. Four are per-value and could run on a single record. Two —
- * `schemaDefault` and `batchStamp` — are corpus-level: they need to know how
- * often a value occurs before they can call it counterfeit, because the same
- * string is evidence or not depending on its company.
+ * Six families, and a value is assigned to exactly one of them. Reporting a
+ * value twice would double-count the same record inside a rate, and rates are
+ * the unit of every finding here.
+ *
+ * PRECEDENCE — the most specific *mechanism* wins, not the cheapest test:
+ *
+ *   schemaDefault > batchStamp > sentinel > reserved > structural > fieldShift
+ *
+ * A declared default names a schema decision somebody made once. A batch stamp
+ * names an import that ran on a Tuesday. A sentinel only names a typist. Given
+ * a field whose declared default happens to be the word `Unknown`, the useful
+ * diagnosis is "your picklist ships with this default and 58% of records never
+ * moved off it", not "somebody typed a placeholder" — the first has a fix and
+ * the second does not. That ordering is why the two corpus-level families are
+ * evaluated first even though they cost a whole extra pass.
  */
 
 import type {
@@ -30,23 +41,6 @@ import {
   shapeOf,
 } from "./value";
 
-function defect(
-  recordId: string,
-  object: FieldDescriptor["object"],
-  field: string,
-  family: CounterfeitFamily,
-  observed: string,
-): Defect {
-  return {
-    recordId,
-    object,
-    kind: "COUNTERFEIT",
-    target: { type: "field", field },
-    detector: family,
-    observed,
-  };
-}
-
 /** Declared meaningless: `test`, `n/a`, `unknown`, `do not use`, plus whatever
  *  the field descriptor adds. */
 function isSentinel(
@@ -59,15 +53,37 @@ function isSentinel(
   return (field.sentinels ?? []).some((s) => normalize(s) === v);
 }
 
-/** Nonsense with structure: keyboard runs, one repeated character, no vowels,
- *  no alphanumerics at all. */
-function isStructuralNonsense(value: string): boolean {
-  return (
-    hasKeyboardRun(value) ||
-    isSingleRepeatedCharacter(value) ||
-    isUnpronounceable(value) ||
-    isAllPunctuation(value)
-  );
+/**
+ * Nonsense with structure.
+ *
+ * Keyboard runs and unpronounceability are tests for *typed* nonsense and are
+ * restricted to fields that hold prose. Applied to a number they are simply
+ * wrong: `23456` employees contains `2345`, and a phone number contains a
+ * keyboard run by definition. A detector that fires on correct data is worse
+ * than no detector, because it teaches the reader to ignore the column.
+ */
+function isStructuralNonsense(value: string, field: FieldDescriptor): boolean {
+  if (isAllPunctuation(value)) return true;
+
+  // A repeated character is nonsense in a name and in a phone number. In a
+  // numeric field it is arithmetic: 22 employees and 33 employees are real
+  // headcounts, and flagging them would put a false positive on roughly one
+  // account in forty.
+  const numeric = field.kind === "number" || field.kind === "date";
+  if (!numeric && isSingleRepeatedCharacter(value)) return true;
+
+  // Keyboard runs and unpronounceability test for *typed* nonsense, so they
+  // only apply to fields that hold prose. `23456` employees contains `2345`,
+  // and a phone number contains a keyboard run by definition. A detector that
+  // fires on correct data is worse than no detector: it teaches the reader to
+  // ignore the column.
+  const prose =
+    field.kind === "text" ||
+    field.kind === "picklist" ||
+    field.kind === "url" ||
+    field.kind === "email";
+  if (!prose) return false;
+  return hasKeyboardRun(value) || isUnpronounceable(value);
 }
 
 /** Format-valid and reserved by standard: `example.com`, `555-01xx`,
@@ -77,34 +93,24 @@ function isReserved(value: string, registries: Registries): boolean {
   return registries.reserved.some((token) => v.includes(normalize(token)));
 }
 
-/**
- * Per-value families. Split out so the corpus-level pass below can reuse them
- * without double-reporting a value that a cheaper family already caught.
- */
-function perValueFamily(
-  value: string,
-  field: FieldDescriptor,
-  registries: Registries,
-): CounterfeitFamily | null {
-  if (isSentinel(value, field, registries)) return "sentinel";
-  if (isReserved(value, registries)) return "reserved";
-  if (isStructuralNonsense(value)) return "structural";
-
-  // Field shift: the string's shape disagrees with the field's declared kind.
-  // Only fires when the shape is confidently something else — a phone in the
-  // company field, an email in the phone field.
+/** The string's shape disagrees with the field's declared kind — a phone in
+ *  the company field, an email in the phone field. */
+function isFieldShift(value: string, field: FieldDescriptor): boolean {
   const shape = shapeOf(value);
-  if (shape !== null) {
-    const declared = field.kind;
-    const shifted =
-      (declared === "phone" && shape !== "phone") ||
-      (declared === "email" && shape !== "email") ||
-      (declared === "url" && shape === "email") ||
-      ((declared === "text" || declared === "picklist") && shape !== "url");
-    if (shifted) return "fieldShift";
+  if (shape === null) return false;
+  switch (field.kind) {
+    case "phone":
+      return shape !== "phone";
+    case "email":
+      return shape !== "email";
+    case "url":
+      return shape === "email";
+    case "text":
+    case "picklist":
+      return shape !== "url";
+    default:
+      return false;
   }
-
-  return null;
 }
 
 export function detectCounterfeit(
@@ -113,100 +119,108 @@ export function detectCounterfeit(
   config: DiagnosisConfig,
   fieldsByObject: ReadonlyMap<string, readonly FieldDescriptor[]>,
 ): Defect[] {
-  const defects: Defect[] = [];
-  /** `${object}:${field}` → value → count. Drives the two corpus-level
-   *  families. */
-  const shares = new Map<string, Map<string, number>>();
-  const totals = new Map<string, number>();
-  /** `${batch}:${object}:${field}` → value → count. */
-  const batchShares = new Map<string, Map<string, number>>();
+  // Pass one: tallies. The two corpus-level families cannot decide anything
+  // about a value until they know how often it occurs.
+  const fieldValueCounts = new Map<string, Map<string, number>>();
+  const fieldTotals = new Map<string, number>();
+  const batchValueCounts = new Map<string, Map<string, number>>();
   const batchTotals = new Map<string, number>();
 
   const bump = (
-    outer: Map<string, Map<string, number>>,
-    totalsMap: Map<string, number>,
+    counts: Map<string, Map<string, number>>,
+    totals: Map<string, number>,
     key: string,
     value: string,
   ) => {
-    let inner = outer.get(key);
+    let inner = counts.get(key);
     if (inner === undefined) {
       inner = new Map();
-      outer.set(key, inner);
+      counts.set(key, inner);
     }
     inner.set(value, (inner.get(value) ?? 0) + 1);
-    totalsMap.set(key, (totalsMap.get(key) ?? 0) + 1);
+    totals.set(key, (totals.get(key) ?? 0) + 1);
   };
 
-  // Pass one: per-value families, and tallies for the corpus-level pair.
-  const caught = new Set<string>();
   for (const record of patient.records) {
     for (const field of fieldsByObject.get(record.object) ?? []) {
       const raw = record.fields[field.id];
       if (isBlank(raw)) continue;
-      const value = raw;
+      const v = normalize(raw);
       const fieldKey = `${record.object}:${field.id}`;
-      bump(shares, totals, fieldKey, normalize(value));
-      if (record.provenance.importBatchId !== null) {
-        bump(
-          batchShares,
-          batchTotals,
-          `${record.provenance.importBatchId}:${fieldKey}`,
-          normalize(value),
-        );
-      }
-
-      const family = perValueFamily(value, field, registries);
-      if (family !== null) {
-        defects.push(defect(record.id, record.object, field.id, family, value));
-        caught.add(`${record.id}:${field.id}`);
+      bump(fieldValueCounts, fieldTotals, fieldKey, v);
+      const batch = record.provenance.importBatchId;
+      if (batch !== null) {
+        bump(batchValueCounts, batchTotals, `${batch}:${fieldKey}`, v);
       }
     }
   }
 
-  // Pass two: the two families that need the whole corpus.
+  const share = (
+    counts: Map<string, Map<string, number>>,
+    totals: Map<string, number>,
+    key: string,
+    value: string,
+  ): { share: number; total: number } => {
+    const total = totals.get(key) ?? 0;
+    if (total === 0) return { share: 0, total: 0 };
+    return { share: (counts.get(key)?.get(value) ?? 0) / total, total };
+  };
+
+  // Pass two: one family per value, in precedence order.
+  const defects: Defect[] = [];
   for (const record of patient.records) {
     for (const field of fieldsByObject.get(record.object) ?? []) {
       const raw = record.fields[field.id];
       if (isBlank(raw)) continue;
-      if (caught.has(`${record.id}:${field.id}`)) continue;
-      const value = raw;
-      const v = normalize(value);
+      const v = normalize(raw);
       const fieldKey = `${record.object}:${field.id}`;
 
-      // schemaDefault — requires BOTH a declared default AND an anomalous
-      // share. Share alone is never enough: `United States` legitimately
-      // dominates a US company's CRM, and flagging it would be the exact
-      // false-confidence failure this repo exists to refuse.
-      if (
-        field.declaredDefault !== undefined &&
-        normalize(field.declaredDefault) === v
-      ) {
-        const count = shares.get(fieldKey)?.get(v) ?? 0;
-        const total = totals.get(fieldKey) ?? 0;
-        if (total > 0 && count / total >= config.defaultShareThreshold) {
-          defects.push(
-            defect(record.id, record.object, field.id, "schemaDefault", value),
-          );
-          continue;
-        }
-      }
-
-      // batchStamp — one identical non-trivial value across most of an import
-      // batch. Four hundred accounts stamped `Technology` by one import is not
-      // four hundred known industries.
-      const batchId = record.provenance.importBatchId;
-      if (batchId !== null) {
-        const key = `${batchId}:${fieldKey}`;
-        const count = batchShares.get(key)?.get(v) ?? 0;
-        const total = batchTotals.get(key) ?? 0;
+      const family = ((): CounterfeitFamily | null => {
+        // schemaDefault — requires BOTH a declared default AND an anomalous
+        // share. Share alone is never enough: `United States` legitimately
+        // dominates a US company's CRM, and flagging it would be the exact
+        // false-confidence failure this repo exists to refuse.
         if (
-          total >= config.minSupport &&
-          count / total >= config.batchStampThreshold
+          field.declaredDefault !== undefined &&
+          normalize(field.declaredDefault) === v &&
+          share(fieldValueCounts, fieldTotals, fieldKey, v).share >=
+            config.defaultShareThreshold
         ) {
-          defects.push(
-            defect(record.id, record.object, field.id, "batchStamp", value),
-          );
+          return "schemaDefault";
         }
+
+        // batchStamp — one identical non-trivial value across most of an
+        // import batch. Four hundred accounts stamped `Technology` by one
+        // import is not four hundred known industries.
+        const batch = record.provenance.importBatchId;
+        if (batch !== null) {
+          const { share: s, total } = share(
+            batchValueCounts,
+            batchTotals,
+            `${batch}:${fieldKey}`,
+            v,
+          );
+          if (total >= config.minSupport && s >= config.batchStampThreshold) {
+            return "batchStamp";
+          }
+        }
+
+        if (isSentinel(raw, field, registries)) return "sentinel";
+        if (isReserved(raw, registries)) return "reserved";
+        if (isStructuralNonsense(raw, field)) return "structural";
+        if (isFieldShift(raw, field)) return "fieldShift";
+        return null;
+      })();
+
+      if (family !== null) {
+        defects.push({
+          recordId: record.id,
+          object: record.object,
+          kind: "COUNTERFEIT",
+          target: { type: "field", field: field.id },
+          detector: family,
+          observed: raw,
+        });
       }
     }
   }
