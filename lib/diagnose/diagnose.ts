@@ -23,6 +23,7 @@ import type {
   Diagnosis,
   DiagnosisConfig,
   Finding,
+  OnsetClass,
   Patient,
   Registries,
 } from "./types";
@@ -134,6 +135,7 @@ export function diagnose(
   findings.sort(
     (a, b) =>
       TYPE_ORDER[a.type] - TYPE_ORDER[b.type] ||
+      ONSET_ORDER[onsetOf(a)] - ONSET_ORDER[onsetOf(b)] ||
       severityOf(b) - severityOf(a) ||
       (defectClassKey(a.defectClass) < defectClassKey(b.defectClass) ? -1 : 1),
   );
@@ -146,6 +148,26 @@ export function diagnose(
     cohortsTested,
     config,
   };
+}
+
+/**
+ * Still happening, then always been true, then stopped.
+ *
+ * This is a categorical sort on a typed attribute, exactly like sorting by
+ * finding type — not a severity number, and nothing is weighted or summed. It
+ * earns its place because a defect that stopped in January and one that is
+ * running today need different things done about them today, and a list that
+ * interleaves them makes the reader work that out one card at a time.
+ */
+const ONSET_ORDER: Record<OnsetClass | "none", number> = {
+  ONSET: 0,
+  CHRONIC: 1,
+  HEALED: 2,
+  none: 1,
+};
+
+function onsetOf(finding: Finding): OnsetClass | "none" {
+  return finding.type === "LOCALIZED" ? finding.onset.class : "none";
 }
 
 /**
