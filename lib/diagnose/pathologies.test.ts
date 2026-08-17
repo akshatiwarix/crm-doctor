@@ -50,7 +50,22 @@ describe("the form that stopped asking", () => {
   it("localises to the webinar form and dates the change", () => {
     const finding = localized("account.industry/absent", "source=webinar");
     expect(finding.onset.class).toBe("ONSET");
-    expect(finding.onset.at).toBe("2025-03-14");
+
+    // The generator changed the form on 2025-03-14. Onset reports the first
+    // date on the later side of the split — the first webinar record that
+    // actually arrived under the new form, which is the first date a reader
+    // could go and look at. Asserting the planted constant instead would pass
+    // even if the engine were rounding to the nearest month.
+    const firstAffected = northwind.records
+      .filter(
+        (r) =>
+          r.object === "account" &&
+          r.provenance.sourceId === "webinar" &&
+          r.provenance.createdAt >= "2025-03-14",
+      )
+      .map((r) => r.provenance.createdAt)
+      .sort()[0];
+    expect(finding.onset.at).toBe(firstAffected);
     expect(finding.onset.before.rate).toBeLessThan(0.1);
     expect(finding.onset.after.rate).toBeGreaterThan(0.85);
   });

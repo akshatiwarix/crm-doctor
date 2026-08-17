@@ -231,10 +231,14 @@ export function generate(spec: Spec) {
         employees < 50 ? int(200_000, 4_500_000)
         : employees < 1000 ? int(6_000_000, 90_000_000)
         : int(120_000_000, 4_000_000_000);
+      // Three stems rather than two: with two, birthday collisions give a few
+      // hundred accidentally-repeated names in 2,400 draws, and a repeated
+      // value stops being a signal worth queueing for a second opinion.
       const stem = pick(STEMS);
       const stem2 = pick(STEMS);
-      const name = `${stem[0]?.toUpperCase()}${stem.slice(1)}${stem2} ${pick(SUFFIXES)}`;
-      const domain = `${stem}${stem2}.example`;
+      const stem3 = pick(STEMS);
+      const name = `${stem[0]?.toUpperCase()}${stem.slice(1)}${stem2}${stem3} ${pick(SUFFIXES)}`;
+      const domain = `${stem}${stem2}${stem3}.example`;
 
       // Batches are assigned by source so an import batch is a real subset of
       // a real acquisition channel, the way it is in a live CRM.

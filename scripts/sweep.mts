@@ -70,7 +70,11 @@ function shuffled<T>(items: readonly T[], random: () => number): T[] {
  * cohort to attach to. Holding the defects fixed and permuting only the labels
  * isolates exactly the association the analyser claims to measure.
  */
-function claimsUnderPermutedLabels(patient: Patient, seed: number): number {
+function claimsUnderPermutedLabels(
+  patient: Patient,
+  seed: number,
+  corrected: boolean,
+): number {
   const defects = detect(patient, registries, DEFAULT_CONFIG);
 
   const provenances = shuffled(
@@ -108,7 +112,12 @@ function claimsUnderPermutedLabels(patient: Patient, seed: number): number {
   }
 
   const cohortsTested = classes.size * cohorts.length;
-  const z = bonferroniZ(DEFAULT_CONFIG.alpha, cohortsTested);
+  // The control arm: the same analysis with the family-wise correction removed
+  // and nothing else changed. This is what a hygiene dashboard with a 5%
+  // threshold slider is.
+  const z = corrected
+    ? bonferroniZ(DEFAULT_CONFIG.alpha, cohortsTested)
+    : bonferroniZ(DEFAULT_CONFIG.alpha, 1);
   let claims = 0;
 
   for (const object of ["account", "contact"] as const) {
@@ -151,9 +160,33 @@ function claimsUnderPermutedLabels(patient: Patient, seed: number): number {
 }
 
 console.log("\npermutation null — labels shuffled, defects held fixed");
-for (const seed of [1, 2, 3, 4, 5]) {
-  const claims = claimsUnderPermutedLabels(northwind, seed);
-  check(`northwind seed ${seed}`, claims === 0, `${claims} claims`);
+{
+  const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const corrected = seeds.map((seed) => claimsUnderPermutedLabels(northwind, seed, true));
+  const uncorrected = seeds.map((seed) => claimsUnderPermutedLabels(northwind, seed, false));
+  const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+  // Not "zero claims". A family-wise error rate of 5% means roughly one run in
+  // twenty produces a claim from noise, and asserting zero would be asserting
+  // something the design does not promise — the first genuinely unlucky seed
+  // would then look like a bug and get "fixed" by loosening something real.
+  // What is promised is that the rate is nominal, and that the correction is
+  // the thing delivering it.
+  const budget = Math.ceil(seeds.length * DEFAULT_CONFIG.alpha) + 1;
+  check(
+    `corrected: ${total(corrected)} claims across ${seeds.length} permutations`,
+    total(corrected) <= budget,
+    `budget ${budget}`,
+  );
+  check(
+    "uncorrected control produces far more",
+    total(uncorrected) >= Math.max(10, total(corrected) * 5),
+    `${total(uncorrected)} claims at an uncorrected 5%`,
+  );
+  console.log(
+    `        per-seed corrected   [${corrected.join(", ")}]\n` +
+      `        per-seed uncorrected [${uncorrected.join(", ")}]`,
+  );
 }
 
 // ---------------------------------------------------------------------------
