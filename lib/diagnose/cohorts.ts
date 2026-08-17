@@ -105,10 +105,34 @@ export function enumerateCohorts(
   const members: number[][] = [];
   const memberSets: Set<number>[] = [];
 
+  /**
+   * Two cohorts covering exactly the same records are one hypothesis described
+   * two ways, not two hypotheses. Every record in the 2024-11 vendor batch
+   * also has the vendor-import source, so `batch=X` and `source=Y & batch=X`
+   * are the same set. Keeping both would inflate the Bonferroni denominator
+   * and then report the pair as a confound — the tool solemnly declining to
+   * distinguish a set from itself.
+   *
+   * The simpler description wins: fewest terms, then lowest id.
+   */
+  const seen = new Map<string, number>();
+
   for (const id of ids) {
     const bucket = buckets.get(id);
     const cohortTerms = terms.get(id);
     if (bucket === undefined || cohortTerms === undefined) continue;
+
+    const signature = bucket.join(",");
+    const existing = seen.get(signature);
+    if (existing !== undefined) {
+      const incumbent = cohorts[existing];
+      if (incumbent !== undefined && cohortTerms.length < incumbent.terms.length) {
+        cohorts[existing] = { id, terms: cohortTerms };
+      }
+      continue;
+    }
+
+    seen.set(signature, cohorts.length);
     cohorts.push({ id, terms: cohortTerms });
     members.push(bucket);
     memberSets.push(new Set(bucket));

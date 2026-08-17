@@ -53,18 +53,23 @@ function patientOf(records: readonly AuditRecord[]): Patient {
   };
 }
 
+const fourRecords = [
+  record("r1", "priya", "webinar", null),
+  record("r2", "priya", "outbound", null),
+  record("r3", "dana", "webinar", null),
+  record("r4", "dana", "webinar", null),
+];
+
 describe("enumerateCohorts", () => {
   it("enumerates singles and pairs, and nothing empty", () => {
-    const patient = patientOf([
-      record("r1", "priya", "webinar", null),
-      record("r2", "dana", "webinar", null),
-    ]);
-    const { cohorts } = enumerateCohorts(patient, registries);
+    const { cohorts } = enumerateCohorts(patientOf(fourRecords), registries);
     expect(cohorts.map((c) => c.id).sort()).toEqual([
+      // `owner=dana & source=webinar` and `owner=priya & source=outbound` are
+      // absent because each covers exactly the records of a simpler cohort.
       "owner=dana",
-      "owner=dana & source=webinar",
       "owner=priya",
       "owner=priya & source=webinar",
+      "source=outbound",
       "source=webinar",
     ]);
     // `owner=priya & owner=dana` is not a cohort — a record has one owner, so
@@ -73,11 +78,29 @@ describe("enumerateCohorts", () => {
   });
 
   it("caps depth at two", () => {
-    const patient = patientOf([record("r1", "priya", "webinar", "b1")]);
-    const { cohorts } = enumerateCohorts(patient, registries);
+    const { cohorts } = enumerateCohorts(patientOf(fourRecords), registries);
     expect(Math.max(...cohorts.map((c) => c.terms.length))).toBe(2);
-    // 3 singles + 3 pairs
-    expect(cohorts).toHaveLength(6);
+  });
+
+  it("collapses cohorts covering exactly the same records", () => {
+    // Every record in this batch also has this source, so `batch=b1` and
+    // `source=webinar & batch=b1` are one hypothesis described two ways.
+    // Keeping both would inflate the Bonferroni denominator and then report
+    // the pair as a confound — the tool declining to distinguish a set from
+    // itself.
+    const patient = patientOf([
+      record("r1", "priya", "webinar", "b1"),
+      record("r2", "priya", "webinar", "b1"),
+      record("r3", "dana", "outbound", null),
+    ]);
+    const { cohorts, members } = enumerateCohorts(patient, registries);
+    const batchLike = cohorts.filter((_, i) => {
+      const bucket = members[i];
+      return bucket?.length === 2 && bucket[0] === 0 && bucket[1] === 1;
+    });
+    expect(batchLike).toHaveLength(1);
+    // The simpler description survives.
+    expect(batchLike[0]?.terms).toHaveLength(1);
   });
 
   it("puts records with no import batch in no batch cohort", () => {
@@ -97,7 +120,7 @@ describe("enumerateCohorts", () => {
   it("does not include creation date as a dimension", () => {
     // Time is the onset axis. A date cohort would report the same defect twice
     // — once as "elevated in March" and once as "started in March".
-    const patient = patientOf([record("r1", "priya", "webinar", null)]);
+    const patient = patientOf(fourRecords);
     const { cohorts } = enumerateCohorts(patient, registries);
     expect(cohorts.some((c) => /created|date|month/i.test(c.id))).toBe(false);
   });
@@ -123,7 +146,7 @@ describe("cohortId", () => {
 
 describe("describeCohort", () => {
   it("uses the patient's labels rather than its ids", () => {
-    const patient = patientOf([record("r1", "priya", "webinar", null)]);
+    const patient = patientOf(fourRecords);
     const { cohorts } = enumerateCohorts(patient, registries);
     const pair = cohorts.find((c) => c.terms.length === 2);
     expect(pair).toBeDefined();

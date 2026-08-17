@@ -1,25 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type {
-  AuditRecord,
-  DiagnosisConfig,
-  Patient,
-  Registries,
-} from "../types";
+import type { AuditRecord, Patient, Registries } from "../types";
+import { DEFAULT_CONFIG as config } from "../diagnose";
 import { defectClassKey, detect, fieldsByObject } from "./index";
 import { detectCounterfeit } from "./counterfeit";
 import { derive } from "./contradiction";
 import { shapeOf } from "./value";
 
-const config: DiagnosisConfig = {
-  minSupport: 20,
-  alpha: 0.05,
-  onsetThreshold: 8,
-  onsetMinSide: 20,
-  subsumptionTolerance: 0.02,
-  confoundOverlap: 0.8,
-  defaultShareThreshold: 0.5,
-  batchStampThreshold: 0.8,
-};
 
 const registries: Registries = {
   dimensions: [{ id: "owner", label: "Owner", key: "ownerId" }],

@@ -1,17 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { detectOnset, type OnsetPoint } from "./onset";
-import type { DiagnosisConfig } from "./types";
+import { DEFAULT_CONFIG as config } from "./diagnose";
 
-const config: DiagnosisConfig = {
-  minSupport: 20,
-  alpha: 0.05,
-  onsetThreshold: 8,
-  onsetMinSide: 20,
-  subsumptionTolerance: 0.02,
-  confoundOverlap: 0.75,
-  defaultShareThreshold: 0.5,
-  batchStampThreshold: 0.8,
-};
 
 /** One record per day from 2025-01-01, defective according to `rate(i)`. */
 function series(n: number, rate: (i: number) => number): OnsetPoint[] {

@@ -397,6 +397,15 @@ export interface DiagnosisConfig {
   readonly subsumptionTolerance: number;
   /** Above this Jaccard overlap two cohorts are treated as inseparable. */
   readonly confoundOverlap: number;
+  /** Minimum ratio of cohort rate to background rate. Significance is not
+   *  materiality: across three thousand records a 4%-versus-2.5% difference
+   *  clears any threshold and changes nothing anybody would do. */
+  readonly minLift: number;
+  /** A non-claim is only worth showing if it would have been interesting.
+   *  Below these it is not reported at all — an `UNDERPOWERED` section listing
+   *  every one-record cohort is noise wearing the costume of rigour. */
+  readonly underpoweredMinDefects: number;
+  readonly underpoweredMultiple: number;
   /** Share above which a declared default is treated as anomalous. */
   readonly defaultShareThreshold: number;
   /** Share of a batch that one identical value must reach to be a stamp. */
